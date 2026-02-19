@@ -6,7 +6,7 @@
 #   TASKMASTER_DONE::<session_id>
 #
 # Optional env vars:
-#   TASKMASTER_MAX          Max number of blocks before allowing stop (default: 0 = infinite)
+#   TASKMASTER_MAX          Max number of blocks before allowing stop (default: 100)
 #   TASKMASTER_DONE_PREFIX  Prefix for done token (default: TASKMASTER_DONE)
 #
 set -euo pipefail
@@ -30,7 +30,7 @@ fi
 COUNTER_DIR="${TMPDIR:-/tmp}/taskmaster"
 mkdir -p "$COUNTER_DIR"
 COUNTER_FILE="${COUNTER_DIR}/${SESSION_ID}"
-MAX=${TASKMASTER_MAX:-0}
+MAX=${TASKMASTER_MAX:-100}
 
 COUNT=0
 if [ -f "$COUNTER_FILE" ]; then
@@ -63,7 +63,7 @@ fi
 NEXT=$((COUNT + 1))
 echo "$NEXT" > "$COUNTER_FILE"
 
-# Optional escape hatch. Default is infinite (0) so hook keeps firing.
+# Optional escape hatch after MAX continuations.
 if [ "$MAX" -gt 0 ] && [ "$NEXT" -ge "$MAX" ]; then
   rm -f "$COUNTER_FILE"
   exit 0
