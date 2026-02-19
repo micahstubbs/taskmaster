@@ -1,10 +1,12 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
 # Taskmaster installer
 #
 # Installs the skill + stop hook and registers it in ~/.claude/settings.json.
 #
-set -euo pipefail
+set -eu
+# Enable pipefail if the shell supports it (bash, zsh)
+(set -o pipefail 2>/dev/null) && set -o pipefail || true
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILL_DIR="$HOME/.claude/skills/taskmaster"
@@ -44,7 +46,7 @@ EOF
   echo "  Created $SETTINGS with stop hook"
 elif ! grep -q 'check-completion.sh' "$SETTINGS" 2>/dev/null; then
   # Settings exists but hook not registered — merge it in
-  if command -v jq &>/dev/null; then
+  if command -v jq >/dev/null 2>&1; then
     HOOK_ENTRY=$(cat <<EOF
 [{"hooks":[{"type":"command","command":"$HOOK_CMD","timeout":10}]}]
 EOF
