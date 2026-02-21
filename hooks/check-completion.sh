@@ -102,6 +102,8 @@ Before stopping, do each of these checks:
 
 IMPORTANT: The user's latest instructions always take priority. If the user said to stop, move on, or skip something, respect that — do not force completion of work the user no longer wants.
 
+DO NOT NARRATE — EXECUTE: If any incomplete work remains, your ONLY job is to DO that work right now. Do NOT respond by explaining what the remaining tasks are, describing their complexity, listing their dependencies, or analyzing how difficult they will be. Do NOT ask the user for permission or direction to proceed. Do NOT write summaries of what is left. Just DO the work. The user asked you to do it — that IS your direction. Every sentence you spend describing remaining work instead of doing it is wasted. Open files, write code, run commands, fix bugs. Act.
+
 HONESTY CHECK: Before marking anything as \"not possible\" or \"skipped\", ask yourself: did you actually TRY, or are you rationalizing skipping it because it seems hard or inconvenient? \"I can't do X\" is almost never true — what you mean is \"I haven't tried X yet.\" If you haven't attempted something, you don't get to claim it's impossible. Attempt it first.
 
 When and only when everything is genuinely 100% done (or explicitly deprioritized by the user), include this exact line in your final response on its own line:
