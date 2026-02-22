@@ -163,7 +163,9 @@ run_expect_mode() {
     --log "$log_path" \
     --emit-dir "$queue_dir" &
   injector_pid="$!"
-  echo "[TASKMASTER] same-process expect transport (queue=$queue_dir)" >&2
+  if [[ "${QUIET:-1}" != "1" ]]; then
+    echo "[TASKMASTER] same-process expect transport (queue=$queue_dir)" >&2
+  fi
 
   if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
     "$EXPECT_BRIDGE" "$queue_dir" "$REAL_CODEX_BIN" "${PASSTHROUGH_ARGS[@]}" || codex_exit=$?
