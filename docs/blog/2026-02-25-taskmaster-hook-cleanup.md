@@ -2,50 +2,76 @@
 
 **2026-02-25**
 
-I built [taskmaster](https://github.com/micahstubbs/taskmaster) a few months ago to solve a real problem: Claude Code would sometimes stop working before actually finishing a task. The stop hook forces the agent to keep going until it emits an explicit `TASKMASTER_DONE::<session_id>` signal — a parseable token that gives external tooling a deterministic completion marker.
+I forked [taskmaster](https://github.com/micahstubbs/taskmaster) a few recently to stop Claude Code from quitting early. The stop [hook](https://github.com/micahstubbs/taskmaster/blob/main/check-completion.sh) fires every time the agent tries to stop and blocks it until it emits an explicit `TASKMASTER_DONE::<session_id>` token — a parseable signal that confirms the agent actually finished.
 
-It works. But the terminal output was a mess.
+It works. The terminal output, though, was a way too much.
 
-## The problem
+#### The problem
 
-Every time the hook blocked a stop, Claude Code would display the full completion checklist in the user-visible terminal output:
+Every time the hook blocked a stop attempt, Claude Code dumped the full completion checklist into the terminal:
 
 ```
-● Ran 9 stop hooks (ctrl+o to expand)
-  ⎿  Stop hook error: TASKMASTER (1/100): Verify that all work is truly complete
-  before stopping.
+  Ran 9 stop hooks (ctrl+o to expand)
+    ⎿  Stop hook error: TASKMASTER (1/100): Verify that
+        all work is truly complete before stopping.
 
-  Before stopping, do each of these checks:
+    Before stopping, do each of these checks:
 
-  1. RE-READ THE ORIGINAL USER MESSAGE(S). List every discrete request...
-  2. CHECK THE TASK LIST. Review every task. Any task not marked completed?...
-  3. CHECK THE PLAN. Walk through each step...
-  4. CHECK FOR ERRORS. Did any tool call, build, test, or lint fail?...
-  5. CHECK FOR LOOSE ENDS. Any TODO comments, placeholder code...
+    1. RE-READ THE ORIGINAL USER MESSAGE(S). List every discrete
+    request or acceptance criterion. For each one, confirm it
+    is fully addressed — not just started, FULLY done. If the
+    user explicitly changed their mind, withdrew a request, or
+    told you to stop or skip something, treat that item as
+    resolved and do NOT continue working on it.
+
+    2. CHECK THE TASK LIST. Review every task. Any task not
+    marked completed? Do it now — unless the user indicated it
+    is no longer wanted.
+
+    3. CHECK THE PLAN. Walk through each step. Any step
+    skipped or partially done? Finish it — unless the user
+    redirected or deprioritized it.
+
+    4. CHECK FOR ERRORS. Did any tool call, build, test, or
+    lint fail? Fix it.
+
+    5. CHECK FOR LOOSE ENDS. Any TODO comments, placeholder
+    code, missing tests, or follow-ups noted but not acted on?
+
+    IMPORTANT: The user's latest instructions always take
+    priority. If the user said to stop, move on, or skip
+    something, respect that — do not force completion of work
+    the user no longer wants.
+
+    If after this review everything is genuinely 100% done (or
+    explicitly deprioritized by the user), briefly confirm
+    completion for each user request. Otherwise, immediately
+    continue working on whatever remains — do not just
+    describe what is left, ACTUALLY DO IT.
 ```
 
-That's a 15-line wall of text every time the hook fires. In a long session with multiple stop attempts, this pollution accumulates. The checklist is instructions *for the AI*, not the user — it doesn't need to be on screen.
+Many lines, every time, accumulating across a long session. The checklist is instructions _for the AI_ — I never needed to read it.
 
-## How Claude Code hook reasons work
+#### How the `reason` field works
 
-Claude Code stop hooks return a JSON object when they want to block:
+Claude Code stop hooks return JSON when they want to block a stop:
 
 ```json
 { "decision": "block", "reason": "..." }
 ```
 
-The `reason` field serves two purposes simultaneously:
+The `reason` field does two things at once:
 
-1. **User-visible terminal output** — shown in the UI as a "Stop hook error"
-2. **AI context** — injected back into the conversation so the agent knows why it was blocked
+1. **User-visible output** — shown in the terminal as a "Stop hook error"
+2. **AI context** — injected back into the conversation so the agent knows what to do next
 
-This dual-use is the root of the problem. If you put the full instructions in `reason` so the AI has them, the user sees a wall of text. But you need the AI to know what to do.
+Before, taskmaster was putting the full checklist in `reason`, to ensure that Claude got the instructions. However, this meant taskmaster was also printing the full checklist to my terminal. Every single stop attempt.
 
-## The fix: separate instructions from signal
+#### What I was missing
 
-The key insight: the AI already has the full completion checklist in system context via `SKILL.md`. Every Claude Code skill file is loaded at session start — the agent knows what to do when blocked without being told again in the hook reason.
+The Claude already has the checklist. He usually has [beads](https://github.com/Dicklesworthstone/beads_rust) too. Every Claude Code [skill file](https://github.com/micahstubbs/taskmaster/blob/main/SKILL.md) loads into system context at session start. The agent doesn't need instructions repeated in the hook reason — it just needs to know the specific token to emit.
 
-So the hook reason only needs to contain one thing: the done signal token the agent must emit to satisfy the hook.
+So I stripped the reason down to exactly that:
 
 ```bash
 DONE_SIGNAL="${DONE_PREFIX}::${SESSION_ID}"
@@ -53,20 +79,20 @@ DONE_SIGNAL="${DONE_PREFIX}::${SESSION_ID}"
 jq -n --arg reason "$DONE_SIGNAL" '{ decision: "block", reason: $reason }'
 ```
 
-Now the terminal shows at most one collapsed line:
+Now the terminal shows one collapsed line:
 
 ```
 ● Ran N stop hooks (ctrl+o to expand)
   ⎿  Stop hook error: TASKMASTER_DONE::abc123xyz
 ```
 
-The agent sees the done signal it needs to emit. The user sees almost nothing. Both get what they need.
+The agent sees the signal it needs. I see almost nothing. Both of us get what we need from the same field.
 
-## Improving the done-signal detection
+#### Faster signal detection too
 
-While I was in the hook, I also upgraded how it detects the done signal. The old version parsed the transcript file — opening and scanning potentially hundreds of lines of JSON on every stop attempt.
+While I was in there I also changed how the hook detects the done signal. The old version opened the transcript file and scanned potentially hundreds of lines of JSON on every stop attempt.
 
-The newer Claude Code API exposes `last_assistant_message` directly in the hook's JSON input. Checking that first is much faster and avoids the transcript entirely in the happy path:
+The Claude Code hook API passes `last_assistant_message` directly in the hook's input JSON. Checking that first skips the file read in the common case:
 
 ```bash
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // ""')
@@ -74,7 +100,7 @@ if [ -n "$LAST_MSG" ] && echo "$LAST_MSG" | grep -Fq "$DONE_SIGNAL" 2>/dev/null;
   HAS_DONE_SIGNAL=true
 fi
 
-# Fallback to transcript only if needed
+# Only scan the transcript if the message check didn't match
 if [ "$HAS_DONE_SIGNAL" = false ] && [ -f "$TRANSCRIPT" ]; then
   if tail -400 "$TRANSCRIPT" 2>/dev/null | grep -Fq "$DONE_SIGNAL"; then
     HAS_DONE_SIGNAL=true
@@ -82,12 +108,14 @@ if [ "$HAS_DONE_SIGNAL" = false ] && [ -f "$TRANSCRIPT" ]; then
 fi
 ```
 
-## The broader lesson
+When the agent just emitted the done signal in its last message — the normal case — no transcript parsing happens.
 
-When designing hooks and other automation that wraps AI agents, it helps to keep user-visible output and AI-context separate. System context (skills, CLAUDE.md) is the right place for persistent instructions. Hook reasons are for transient signals — the specific thing the agent needs right now to unblock itself.
+#### The lesson
 
-In this case: "emit `TASKMASTER_DONE::abc123` to stop." That's it.
+Hook reasons and system context have different jobs. System context (skill files, `CLAUDE.md`) carries persistent instructions that shape behavior across a whole session. Hook reasons carry transient, stop-specific information — the minimum the agent needs right now.
 
-The full completion checklist is still there, still enforced, still directing the agent's behavior. It's just not cluttering the terminal anymore.
+Here that's: "emit `TASKMASTER_DONE::abc123` and you're done."
 
-The changes shipped as [v2.3.0](https://github.com/micahstubbs/taskmaster/releases/tag/v2.3.0).
+The checklist still runs. The skill enforcement is unchanged. It just doesn't output the skill prompt to my terminal anymore.
+
+These changes shipped as [v2.3.0](https://github.com/micahstubbs/taskmaster/releases/tag/v2.3.0).
