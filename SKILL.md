@@ -95,10 +95,17 @@ This gives external automation a deterministic completion marker to parse.
 
 ## Configuration
 
-- `TASKMASTER_MAX` (default `0`): Max number of blocked stop attempts before
+- `TASKMASTER_MAX` (default `100`): Max number of blocked stop attempts before
   allowing stop. `0` means infinite (keep firing).
 - `TASKMASTER_DONE_PREFIX` (default `TASKMASTER_DONE`): Prefix used for the
   done token.
+
+## Design Notes
+
+The hook's `reason` field is intentionally minimal — it contains only the done
+signal token. The full completion checklist lives here in SKILL.md, which is
+always loaded as system context. This keeps the user-visible terminal output
+clean while the agent still has all required instructions.
 
 ## Setup
 

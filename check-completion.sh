@@ -2,14 +2,14 @@
 #
 # Stop hook: keep firing until the agent emits an explicit done signal.
 #
-# The stop is allowed only after the transcript contains:
+# The stop is allowed only after the agent emits:
 #   TASKMASTER_DONE::<session_id>
 #
 # Optional env vars:
 #   TASKMASTER_MAX          Max number of blocks before allowing stop (default: 100)
 #   TASKMASTER_DONE_PREFIX  Prefix for done token (default: TASKMASTER_DONE)
 #
-set -euo pipefail
+set -u
 
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
@@ -41,17 +41,17 @@ fi
 DONE_PREFIX="${TASKMASTER_DONE_PREFIX:-TASKMASTER_DONE}"
 DONE_SIGNAL="${DONE_PREFIX}::${SESSION_ID}"
 HAS_DONE_SIGNAL=false
-HAS_RECENT_ERRORS=false
 
-if [ -f "$TRANSCRIPT" ]; then
-  TAIL_400=$(tail -400 "$TRANSCRIPT" 2>/dev/null || true)
-  if echo "$TAIL_400" | grep -Fq "$DONE_SIGNAL" 2>/dev/null; then
+# Primary: check last_assistant_message (most reliable — no transcript parsing needed)
+LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // ""')
+if [ -n "$LAST_MSG" ] && echo "$LAST_MSG" | grep -Fq "$DONE_SIGNAL" 2>/dev/null; then
+  HAS_DONE_SIGNAL=true
+fi
+
+# Fallback: check transcript file if last_assistant_message didn't match
+if [ "$HAS_DONE_SIGNAL" = false ] && [ -f "$TRANSCRIPT" ]; then
+  if tail -400 "$TRANSCRIPT" 2>/dev/null | grep -Fq "$DONE_SIGNAL"; then
     HAS_DONE_SIGNAL=true
-  fi
-
-  TAIL_40=$(tail -40 "$TRANSCRIPT" 2>/dev/null || true)
-  if echo "$TAIL_40" | grep -qi '"is_error":\s*true' 2>/dev/null; then
-    HAS_RECENT_ERRORS=true
   fi
 fi
 
@@ -63,25 +63,12 @@ fi
 NEXT=$((COUNT + 1))
 echo "$NEXT" > "$COUNTER_FILE"
 
-# Optional escape hatch after MAX continuations.
+# Optional escape hatch. Default is 100.
 if [ "$MAX" -gt 0 ] && [ "$NEXT" -ge "$MAX" ]; then
   rm -f "$COUNTER_FILE"
   exit 0
 fi
 
-if [ "$HAS_RECENT_ERRORS" = true ]; then
-  PREAMBLE="Recent errors detected — resolve them."
-else
-  PREAMBLE="Stop blocked."
-fi
-
-if [ "$MAX" -gt 0 ]; then
-  LABEL="TASKMASTER (${NEXT}/${MAX})"
-else
-  LABEL="TASKMASTER (${NEXT})"
-fi
-
-# --- reprompt (kept minimal — full checklist lives in SKILL.md system context) ---
-REASON="${LABEL}: ${PREAMBLE} Follow the taskmaster completion checklist. Done signal: ${DONE_SIGNAL}"
-
-jq -n --arg reason "$REASON" '{ decision: "block", reason: $reason }'
+# Minimal reason — full completion checklist lives in SKILL.md (always in system context).
+# Only the done signal is included so the agent knows exactly what to emit when complete.
+jq -n --arg reason "$DONE_SIGNAL" '{ decision: "block", reason: $reason }'
