@@ -14,6 +14,8 @@ set -u
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path')
+# Expand leading ~ to $HOME (bash does not expand tilde inside quoted strings)
+TRANSCRIPT="${TRANSCRIPT/#\~/$HOME}"
 if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
   SESSION_ID="unknown-session"
 fi
