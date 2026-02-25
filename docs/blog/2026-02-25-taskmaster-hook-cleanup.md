@@ -119,3 +119,5 @@ Here that's: "emit `TASKMASTER_DONE::abc123` and you're done."
 The checklist still runs. The skill enforcement is unchanged. It just doesn't output the skill prompt to my terminal anymore.
 
 These changes shipped as [v2.3.0](https://github.com/micahstubbs/taskmaster/releases/tag/v2.3.0).
+
+Read more about how stop decision control and the `reason` field works in the [Claude Code Hooks docs](https://code.claude.com/docs/en/hooks#stop-decision-control).
