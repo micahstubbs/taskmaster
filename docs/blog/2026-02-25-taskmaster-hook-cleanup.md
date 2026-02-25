@@ -2,7 +2,7 @@
 
 **2026-02-25**
 
-I forked [taskmaster](https://github.com/micahstubbs/taskmaster) a few recently to stop Claude Code from quitting early. The stop [hook](https://github.com/micahstubbs/taskmaster/blob/main/check-completion.sh) fires every time the agent tries to stop and blocks it until it emits an explicit `TASKMASTER_DONE::<session_id>` token — a parseable signal that confirms the agent actually finished.
+I forked [taskmaster](https://github.com/micahstubbs/taskmaster) a few recently to stop Claude from quitting early when working in a Claude Code session. The stop [hook](https://github.com/micahstubbs/taskmaster/blob/main/check-completion.sh) fires every time Claude tries to stop and blocks it until he emits an explicit `TASKMASTER_DONE::<session_id>` token — a parseable signal that confirms Claude is actually finished.
 
 It works. The terminal output, though, was a way too much.
 
@@ -17,37 +17,19 @@ Every time the hook blocked a stop attempt, Claude Code dumped the full completi
 
     Before stopping, do each of these checks:
 
-    1. RE-READ THE ORIGINAL USER MESSAGE(S). List every discrete
-    request or acceptance criterion. For each one, confirm it
-    is fully addressed — not just started, FULLY done. If the
-    user explicitly changed their mind, withdrew a request, or
-    told you to stop or skip something, treat that item as
-    resolved and do NOT continue working on it.
+    1. RE-READ THE ORIGINAL USER MESSAGE(S). List every discrete request or acceptance criterion. For each one, confirm it is fully addressed — not just started, FULLY done. If the user explicitly changed their mind, withdrew a request, or told you to stop or skip something, treat that item as resolved and do NOT continue working on it.
 
-    2. CHECK THE TASK LIST. Review every task. Any task not
-    marked completed? Do it now — unless the user indicated it
-    is no longer wanted.
+    2. CHECK THE TASK LIST. Review every task. Any task not marked completed? Do it now — unless the user indicated it is no longer wanted.
 
-    3. CHECK THE PLAN. Walk through each step. Any step
-    skipped or partially done? Finish it — unless the user
-    redirected or deprioritized it.
+    3. CHECK THE PLAN. Walk through each step. Any step skipped or partially done? Finish it — unless the user redirected or deprioritized it.
 
-    4. CHECK FOR ERRORS. Did any tool call, build, test, or
-    lint fail? Fix it.
+    4. CHECK FOR ERRORS. Did any tool call, build, test, or lint fail? Fix it.
 
-    5. CHECK FOR LOOSE ENDS. Any TODO comments, placeholder
-    code, missing tests, or follow-ups noted but not acted on?
+    5. CHECK FOR LOOSE ENDS. Any TODO comments, placeholder code, missing tests, or follow-ups noted but not acted on?
 
-    IMPORTANT: The user's latest instructions always take
-    priority. If the user said to stop, move on, or skip
-    something, respect that — do not force completion of work
-    the user no longer wants.
+    IMPORTANT: The user's latest instructions always take priority. If the user said to stop, move on, or skip something, respect that — do not force completion of work the user no longer wants.
 
-    If after this review everything is genuinely 100% done (or
-    explicitly deprioritized by the user), briefly confirm
-    completion for each user request. Otherwise, immediately
-    continue working on whatever remains — do not just
-    describe what is left, ACTUALLY DO IT.
+    If after this review everything is genuinely 100% done (or explicitly deprioritized by the user), briefly confirm completion for each user request. Otherwise, immediately continue working on whatever remains — do not just describe what is left, ACTUALLY DO IT.
 ```
 
 Many lines, every time, accumulating across a long session. The checklist is instructions _for the AI_ — I never needed to read it.
@@ -63,13 +45,13 @@ Claude Code stop hooks return JSON when they want to block a stop:
 The `reason` field does two things at once:
 
 1. **User-visible output** — shown in the terminal as a "Stop hook error"
-2. **AI context** — injected back into the conversation so the agent knows what to do next
+2. **AI context** — injected back into the conversation so that Claude knows what to do next
 
 Before, taskmaster was putting the full checklist in `reason`, to ensure that Claude got the instructions. However, this meant taskmaster was also printing the full checklist to my terminal. Every single stop attempt.
 
 #### What I was missing
 
-The Claude already has the checklist. He usually has [beads](https://github.com/Dicklesworthstone/beads_rust) too. Every Claude Code [skill file](https://github.com/micahstubbs/taskmaster/blob/main/SKILL.md) loads into system context at session start. The agent doesn't need instructions repeated in the hook reason — it just needs to know the specific token to emit.
+Claude already has the checklist from the taskmaster [skill file](https://github.com/micahstubbs/taskmaster/blob/main/SKILL.md). Every Claude Code `SKILL.md` file loads into system context at session start. Claude doesn't need instructions repeated in the hook reason — it just needs to know the specific token to emit.
 
 So I stripped the reason down to exactly that:
 
@@ -86,7 +68,7 @@ Now the terminal shows one collapsed line:
   ⎿  Stop hook error: TASKMASTER_DONE::abc123xyz
 ```
 
-The agent sees the signal it needs. I see almost nothing. Both of us get what we need from the same field.
+Claude sees the signal he needs. I see almost nothing. Both of us get what we need from the same field.
 
 #### Faster signal detection too
 
@@ -108,11 +90,11 @@ if [ "$HAS_DONE_SIGNAL" = false ] && [ -f "$TRANSCRIPT" ]; then
 fi
 ```
 
-When the agent just emitted the done signal in its last message — the normal case — no transcript parsing happens.
+When Claude just emitted the done signal in his last message — the normal case — no transcript parsing happens.
 
 #### The lesson
 
-Hook reasons and system context have different jobs. System context (skill files, `CLAUDE.md`) carries persistent instructions that shape behavior across a whole session. Hook reasons carry transient, stop-specific information — the minimum the agent needs right now.
+Hook reasons and system context have different jobs. System context (skill files, `CLAUDE.md`) carries persistent instructions that shape behavior across a whole session. Hook reasons carry transient, stop-specific information — the minimum Claude needs right now.
 
 Here that's: "emit `TASKMASTER_DONE::abc123` and you're done."
 
