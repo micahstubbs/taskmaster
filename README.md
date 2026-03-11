@@ -31,7 +31,8 @@ TASKMASTER_DONE::<session_id>
 ```
 
 If that token is missing at stop time, Taskmaster blocks stop and pushes the
-session to continue.
+current turn to continue. Codex monitoring stays active for later turns in the
+same long-lived session.
 
 ### Enforcement Prompt
 
@@ -51,6 +52,8 @@ The shared prompt source lives in `taskmaster-compliance-prompt.sh`.
   - Watches `task_complete` / `turn_complete` events.
   - If done token is missing, injects a continuation prompt into the same
     running Codex process via expect PTY.
+  - A done token suppresses injection for that completed turn only; it does
+    not permanently disable Taskmaster for future turns in the same session.
 - Claude path:
   - Registers a `Stop` command hook.
   - Hook runs `check-completion.sh`.
@@ -100,6 +103,12 @@ Explicit alias is also available:
 
 ```bash
 codex-taskmaster [args]
+```
+
+Interactive resume is also supported:
+
+```bash
+codex resume [session-or-thread]
 ```
 
 ### Claude

@@ -11,10 +11,13 @@ CLAUDE_ROOT="$HOME/.claude"
 CODEX_SKILL_DIR="$CODEX_ROOT/skills/taskmaster"
 CLAUDE_SKILL_DIR="$CLAUDE_ROOT/skills/taskmaster"
 
-CODEX_BIN_DIR="$CODEX_ROOT/bin"
+CODEX_VENDOR_BIN_DIR="$CODEX_ROOT/bin"
+CODEX_BIN_DIR="${TASKMASTER_CODEX_BIN_DIR:-$HOME/.local/bin}"
 CODEX_LAUNCHER_LINK="$CODEX_BIN_DIR/codex-taskmaster"
 CODEX_SHIM_LINK="$CODEX_BIN_DIR/codex"
-SUPERSET_CODEX_WRAPPER="$HOME/.superset/bin/codex"
+CODEX_LEGACY_LAUNCHER_LINK="$CODEX_VENDOR_BIN_DIR/codex-taskmaster"
+CODEX_LEGACY_SHIM_LINK="$CODEX_VENDOR_BIN_DIR/codex"
+SHELL_NAME="$(basename "${SHELL:-}")"
 
 CLAUDE_HOOKS_DIR="$CLAUDE_ROOT/hooks"
 CLAUDE_HOOK_LINK="$CLAUDE_HOOKS_DIR/taskmaster-check-completion.sh"
@@ -24,16 +27,8 @@ CLAUDE_HOOK_COMMAND="~/.claude/hooks/taskmaster-check-completion.sh"
 safe_copy() {
   local src="$1"
   local dst="$2"
-  local src_abs=""
-  local dst_abs=""
-  local dst_dir=""
 
-  src_abs="$(cd -P "$(dirname "$src")" && pwd)/$(basename "$src")"
-  dst_dir="$(dirname "$dst")"
-  mkdir -p "$dst_dir"
-  dst_abs="$(cd -P "$dst_dir" && pwd)/$(basename "$dst")"
-
-  if [[ "$src_abs" == "$dst_abs" ]]; then
+  if [[ "$(cd "$(dirname "$src")" && pwd)/$(basename "$src")" == "$(cd "$(dirname "$dst")" && pwd)/$(basename "$dst")" ]]; then
     return 0
   fi
   cp "$src" "$dst"
@@ -58,6 +53,7 @@ copy_skill_files() {
   safe_copy "$SCRIPT_DIR/hooks/check-completion.sh" "$skill_dir/hooks/check-completion.sh"
   safe_copy "$SCRIPT_DIR/hooks/inject-continue-codex.sh" "$skill_dir/hooks/inject-continue-codex.sh"
   safe_copy "$SCRIPT_DIR/hooks/run-codex-expect-bridge.exp" "$skill_dir/hooks/run-codex-expect-bridge.exp"
+  safe_copy "$SCRIPT_DIR/hooks/run-codex-resume-bridge.exp" "$skill_dir/hooks/run-codex-resume-bridge.exp"
 
   chmod +x "$skill_dir/install.sh"
   chmod +x "$skill_dir/uninstall.sh"
@@ -67,6 +63,7 @@ copy_skill_files() {
   chmod +x "$skill_dir/hooks/check-completion.sh"
   chmod +x "$skill_dir/hooks/inject-continue-codex.sh"
   chmod +x "$skill_dir/hooks/run-codex-expect-bridge.exp"
+  chmod +x "$skill_dir/hooks/run-codex-resume-bridge.exp"
 }
 
 codex_detected() {
@@ -75,6 +72,118 @@ codex_detected() {
 
 claude_detected() {
   command -v claude >/dev/null 2>&1 || [[ -d "$CLAUDE_ROOT" ]]
+}
+
+resolve_link_target() {
+  local link_path="$1"
+  local raw_target
+  local target_dir
+
+  raw_target="$(readlink "$link_path")"
+  if [[ "$raw_target" == /* ]]; then
+    printf '%s\n' "$raw_target"
+    return 0
+  fi
+
+  target_dir="$(cd "$(dirname "$link_path")" && cd "$(dirname "$raw_target")" && pwd)"
+  printf '%s/%s\n' "$target_dir" "$(basename "$raw_target")"
+}
+
+remove_taskmaster_link_if_present() {
+  local link_path="$1"
+  local resolved_target
+
+  [[ -L "$link_path" ]] || return 0
+  resolved_target="$(resolve_link_target "$link_path")"
+
+  case "$resolved_target" in
+    "$CODEX_SKILL_DIR/run-taskmaster-codex.sh"|"$CODEX_LAUNCHER_LINK"|"$CODEX_LEGACY_LAUNCHER_LINK")
+      rm -f "$link_path"
+      echo "  Codex: removed Taskmaster-managed link at $link_path"
+      ;;
+  esac
+}
+
+detect_shell_rc_path() {
+  case "$SHELL_NAME" in
+    zsh)
+      printf '%s\n' "$HOME/.zshrc"
+      ;;
+    bash)
+      printf '%s\n' "$HOME/.bashrc"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ensure_shell_wrapper_block() {
+  local rc_path="$1"
+  local launcher_dir="$2"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "  Codex: python3 not found; add $launcher_dir to PATH manually" >&2
+    return 0
+  fi
+
+  python3 - "$rc_path" "$launcher_dir" <<'PY'
+import os
+import sys
+
+rc_path = os.path.expanduser(sys.argv[1])
+launcher_dir = os.path.expanduser(sys.argv[2])
+
+start = "# TASKMASTER CODEX WRAPPER"
+end = "# END TASKMASTER CODEX WRAPPER"
+block = f"""{start}
+taskmaster_codex_bin="{launcher_dir}"
+case ":$PATH:" in
+  *":$taskmaster_codex_bin:"*) ;;
+  *) export PATH="$taskmaster_codex_bin:$PATH" ;;
+esac
+{end}
+"""
+
+try:
+    with open(rc_path, "r", encoding="utf-8") as f:
+        content = f.read()
+except FileNotFoundError:
+    content = ""
+
+if start in content and end in content:
+    before, rest = content.split(start, 1)
+    _, after = rest.split(end, 1)
+    new_content = before.rstrip() + "\n\n" + block + after.lstrip("\n")
+else:
+    stripped = content.rstrip()
+    if stripped:
+        new_content = stripped + "\n\n" + block
+    else:
+        new_content = block
+
+os.makedirs(os.path.dirname(rc_path), exist_ok=True)
+with open(rc_path, "w", encoding="utf-8") as f:
+    f.write(new_content.rstrip() + "\n")
+PY
+
+  echo "  Codex: ensured $launcher_dir is early on PATH via $rc_path"
+}
+
+install_codex_shim_if_requested() {
+  if [[ "${TASKMASTER_INSTALL_CODEX_SHIM:-1}" != "1" ]]; then
+    remove_taskmaster_link_if_present "$CODEX_SHIM_LINK"
+    echo "  Codex: leaving \`codex\` unmanaged; use \`codex-taskmaster\`"
+    return 0
+  fi
+
+  if [[ -e "$CODEX_SHIM_LINK" && ! -L "$CODEX_SHIM_LINK" ]]; then
+    echo "  Codex: skipped shim at $CODEX_SHIM_LINK (existing file is not a symlink)"
+    return 0
+  fi
+
+  ln -sf "$CODEX_SKILL_DIR/run-taskmaster-codex.sh" "$CODEX_SHIM_LINK"
+  echo "  Codex: linked codex shim at $CODEX_SHIM_LINK"
 }
 
 ensure_claude_stop_hook() {
@@ -160,68 +269,31 @@ else:
 PY
 }
 
-ensure_superset_codex_prefers_taskmaster() {
-  local wrapper_path="$1"
-
-  if [[ ! -f "$wrapper_path" ]]; then
-    return 0
-  fi
-
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "  Codex: python3 not found; update $wrapper_path manually to prefer codex-taskmaster" >&2
-    return 0
-  fi
-
-  python3 - "$wrapper_path" <<'PY'
-from pathlib import Path
-import sys
-
-wrapper_path = Path(sys.argv[1]).expanduser()
-text = wrapper_path.read_text(encoding="utf-8")
-
-if "find_taskmaster_or_real_binary()" in text:
-    print("  Codex: Superset wrapper already prefers codex-taskmaster")
-    raise SystemExit(0)
-
-needle = 'REAL_BIN="$(find_real_binary "codex")"'
-if needle not in text:
-    print(f"  Codex: Superset wrapper format not recognized; skipped {wrapper_path}", file=sys.stderr)
-    raise SystemExit(0)
-
-replacement = """find_taskmaster_or_real_binary() {
-  local taskmaster_bin=""
-  taskmaster_bin="$(find_real_binary "codex-taskmaster" || true)"
-  if [ -n "$taskmaster_bin" ]; then
-    printf "%s\\n" "$taskmaster_bin"
-    return 0
-  fi
-
-  find_real_binary "codex"
-}
-
-REAL_BIN="$(find_taskmaster_or_real_binary)" """
-
-text = text.replace(needle, replacement, 1)
-text = text.replace(
-    "Superset: codex not found in PATH. Install it and ensure it is on PATH, then retry.",
-    "Superset: codex or codex-taskmaster not found in PATH. Install it and ensure it is on PATH, then retry.",
-)
-wrapper_path.write_text(text, encoding="utf-8")
-print("  Codex: updated Superset wrapper to prefer codex-taskmaster")
-PY
-}
-
 install_codex() {
+  local shell_rc_path=""
+
   copy_skill_files "$CODEX_SKILL_DIR"
 
   mkdir -p "$CODEX_BIN_DIR"
   ln -sf "$CODEX_SKILL_DIR/run-taskmaster-codex.sh" "$CODEX_LAUNCHER_LINK"
-  ln -sf "$CODEX_SKILL_DIR/run-taskmaster-codex.sh" "$CODEX_SHIM_LINK"
+  install_codex_shim_if_requested
+
+  if [[ "$CODEX_BIN_DIR" != "$CODEX_VENDOR_BIN_DIR" ]]; then
+    remove_taskmaster_link_if_present "$CODEX_LEGACY_LAUNCHER_LINK"
+    remove_taskmaster_link_if_present "$CODEX_LEGACY_SHIM_LINK"
+  fi
 
   echo "  Codex: installed skill files to $CODEX_SKILL_DIR"
   echo "  Codex: linked launcher at $CODEX_LAUNCHER_LINK"
-  echo "  Codex: linked shim at $CODEX_SHIM_LINK"
-  ensure_superset_codex_prefers_taskmaster "$SUPERSET_CODEX_WRAPPER"
+  echo "  Codex: launcher dir is user-managed so Codex upgrades should not overwrite it"
+
+  if [[ "${TASKMASTER_INSTALL_SHELL_WRAPPER:-1}" == "1" ]]; then
+    if shell_rc_path="$(detect_shell_rc_path)"; then
+      ensure_shell_wrapper_block "$shell_rc_path" "$CODEX_BIN_DIR"
+    else
+      echo "  Codex: unsupported shell '$SHELL_NAME'; ensure $CODEX_BIN_DIR is ahead of the real Codex binary on PATH"
+    fi
+  fi
 }
 
 install_claude() {
@@ -288,6 +360,8 @@ if [[ "$INSTALL_CODEX" -eq 1 ]]; then
   echo ""
   echo "Codex usage:"
   echo "  codex [codex args]"
+  echo "  codex-taskmaster [codex args]"
+  echo "  Disable codex shim install: TASKMASTER_INSTALL_CODEX_SHIM=0 bash ~/.codex/skills/taskmaster/install.sh"
 fi
 
 if [[ "$INSTALL_CLAUDE" -eq 1 ]]; then

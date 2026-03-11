@@ -17,6 +17,7 @@ source "$SCRIPT_DIR/../taskmaster-compliance-prompt.sh"
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path')
+TRANSCRIPT="${TRANSCRIPT/#\~/$HOME}"
 if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
   SESSION_ID="unknown-session"
 fi
@@ -40,6 +41,23 @@ if [ -f "$COUNTER_FILE" ]; then
   COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo "0")
 fi
 
+transcript_has_done_signal() {
+  local transcript_path="$1"
+  local done_signal="$2"
+
+  [ -f "$transcript_path" ] || return 1
+
+  tail -400 "$transcript_path" 2>/dev/null \
+    | jq -Rr '
+        fromjson?
+        | select(.type == "response_item" and .payload.type == "message" and .payload.role == "assistant")
+        | .payload.content[]?
+        | select(.type == "output_text")
+        | .text // empty
+      ' 2>/dev/null \
+    | grep -Fq "$done_signal"
+}
+
 # --- done signal detection ---
 DONE_SIGNAL="TASKMASTER_DONE::${SESSION_ID}"
 HAS_DONE_SIGNAL=false
@@ -54,8 +72,7 @@ fi
 
 # Fallback: check transcript file if last_assistant_message didn't match
 if [ "$HAS_DONE_SIGNAL" = false ] && [ -f "$TRANSCRIPT" ]; then
-  # Use grep directly on file (avoids broken-pipe with echo|grep under pipefail)
-  if tail -400 "$TRANSCRIPT" 2>/dev/null | grep -Fq "$DONE_SIGNAL"; then
+  if transcript_has_done_signal "$TRANSCRIPT" "$DONE_SIGNAL"; then
     HAS_DONE_SIGNAL=true
   fi
 

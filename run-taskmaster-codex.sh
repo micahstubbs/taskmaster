@@ -28,6 +28,10 @@ resolve_real_codex_bin() {
         continue
         ;;
     esac
+    # Skip shell script wrappers (superset, etc.) — only accept real binaries
+    if head -c 2 "$candidate" 2>/dev/null | grep -q '^#!'; then
+      continue
+    fi
     echo "$candidate"
     return 0
   done < <(which -a codex 2>/dev/null | awk '!seen[$0]++')
@@ -51,7 +55,7 @@ fi
 
 is_known_subcommand() {
   case "$1" in
-    exec|e|review|login|logout|mcp|mcp-server|app-server|app|completion|sandbox|debug|apply|a|resume|fork|cloud|features|help)
+    exec|e|review|login|logout|mcp|mcp-server|app-server|app|completion|sandbox|debug|apply|a|fork|cloud|features|help)
       return 0
       ;;
     *)
@@ -147,9 +151,37 @@ cleanup_background() {
   fi
 }
 
+run_injector_supervisor() {
+  local log_path="$1"
+  local queue_dir="$2"
+  local state_dir="$3"
+  local stop_file="$4"
+  local runtime_log="$5"
+  local status=0
+
+  while [[ ! -f "$stop_file" ]]; do
+    TASKMASTER_RUNTIME_LOG="$runtime_log" "$INJECTOR" \
+      --follow \
+      --log "$log_path" \
+      --emit-dir "$queue_dir" \
+      --state-dir "$state_dir" || status=$?
+
+    if [[ -f "$stop_file" ]]; then
+      break
+    fi
+
+    printf '[%s] supervisor_restart injector_status=%s log=%s\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" "$log_path" >>"$runtime_log"
+    sleep 1
+  done
+}
+
 run_expect_mode() {
   local log_path
   local queue_dir
+  local state_dir
+  local stop_file
+  local runtime_log
   local injector_pid=""
   local codex_exit=0
 
@@ -157,15 +189,13 @@ run_expect_mode() {
   prepare_log_env "$log_path"
 
   queue_dir="$(mktemp -d "${TMPDIR:-/tmp}/taskmaster-emit.XXXXXX")"
+  state_dir="$(mktemp -d "${TMPDIR:-/tmp}/taskmaster-state.XXXXXX")"
+  stop_file="$state_dir/stop"
+  runtime_log="$state_dir/runtime.log"
 
-  "$INJECTOR" \
-    --follow \
-    --log "$log_path" \
-    --emit-dir "$queue_dir" &
+  run_injector_supervisor "$log_path" "$queue_dir" "$state_dir" "$stop_file" "$runtime_log" &
   injector_pid="$!"
-  if [[ "${QUIET:-1}" != "1" ]]; then
-    echo "[TASKMASTER] same-process expect transport (queue=$queue_dir)" >&2
-  fi
+  # Details written to runtime_log; no stderr noise on startup
 
   if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
     "$EXPECT_BRIDGE" "$queue_dir" "$REAL_CODEX_BIN" "${PASSTHROUGH_ARGS[@]}" || codex_exit=$?
@@ -173,8 +203,10 @@ run_expect_mode() {
     "$EXPECT_BRIDGE" "$queue_dir" "$REAL_CODEX_BIN" || codex_exit=$?
   fi
 
+  : > "$stop_file"
   cleanup_background "$injector_pid"
   rm -rf "$queue_dir"
+  rm -rf "$state_dir"
 
   return "$codex_exit"
 }

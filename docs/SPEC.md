@@ -14,7 +14,7 @@
 ## 1. Goal
 
 Prevent premature agent stopping and provide a deterministic, machine-parseable
-completion signal.
+completion signal while remaining usable across long-lived Codex sessions.
 
 Taskmaster enforces explicit completion through a done-token contract and
 continuation/hook feedback when that contract is not satisfied.
@@ -24,15 +24,17 @@ Both Codex and Claude paths consume the same shared compliance prompt text from
 
 ## 2. Completion Contract
 
-A run is considered complete only when assistant output includes:
+A turn is considered complete only when assistant output includes:
 
 ```text
 TASKMASTER_DONE::<session_id>
 ```
 
 - `<session_id>` is session-scoped.
-- The line must be emitted only when work is truly complete.
-- Automation can parse this line as the authoritative completion marker.
+- The line must be emitted only when that turn's work is truly complete.
+- Automation can parse this line as the authoritative completion marker for the
+  completed turn without disabling monitoring for later turns in the same
+  Codex process.
 
 ## 3. Architecture
 
@@ -45,6 +47,10 @@ TASKMASTER_DONE::<session_id>
 3. Runs Codex in managed expect PTY (`hooks/run-codex-expect-bridge.exp`).
 4. On incomplete turn (missing done token), injector emits continuation prompt
    files and expect bridge injects them into the same running process.
+5. On complete turn (done token present), injector skips injection for that
+   turn and keeps following the session log for subsequent turns.
+6. Interactive `codex resume ...` launches stay on this managed path rather
+   than bypassing Taskmaster as a direct passthrough.
 
 ### 3.2 Claude Stop-Hook Path
 

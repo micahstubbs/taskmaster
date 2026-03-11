@@ -20,6 +20,12 @@ if {![file isdirectory $queue_dir]} {
   file mkdir $queue_dir
 }
 
+proc clear_pending_injections {queue_dir} {
+  foreach f [glob -nocomplain -types f -- "$queue_dir/inject.*.txt"] {
+    file delete -force -- $f
+  }
+}
+
 proc send_injected_payload {payload submit_delay_ms} {
   if {[string length $payload] > 0} {
     # Always use bracketed paste framing so Codex treats this as paste,
@@ -51,10 +57,14 @@ proc inject_pending {queue_dir submit_delay_ms} {
 
     send_injected_payload $payload $submit_delay_ms
   }
+
+  return 0
 }
 
 proc periodic_inject {queue_dir submit_delay_ms} {
-  inject_pending $queue_dir $submit_delay_ms
+  if {[inject_pending $queue_dir $submit_delay_ms]} {
+    return
+  }
   after 200 [list periodic_inject $queue_dir $submit_delay_ms]
 }
 

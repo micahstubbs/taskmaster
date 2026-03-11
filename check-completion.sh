@@ -42,6 +42,23 @@ if [ -f "$COUNTER_FILE" ]; then
   COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo "0")
 fi
 
+transcript_has_done_signal() {
+  local transcript_path="$1"
+  local done_signal="$2"
+
+  [ -f "$transcript_path" ] || return 1
+
+  tail -400 "$transcript_path" 2>/dev/null \
+    | jq -Rr '
+        fromjson?
+        | select(.type == "response_item" and .payload.type == "message" and .payload.role == "assistant")
+        | .payload.content[]?
+        | select(.type == "output_text")
+        | .text // empty
+      ' 2>/dev/null \
+    | grep -Fq "$done_signal"
+}
+
 # --- done signal detection ---
 DONE_SIGNAL="TASKMASTER_DONE::${SESSION_ID}"
 HAS_DONE_SIGNAL=false
@@ -55,8 +72,7 @@ fi
 
 # Fall back to transcript search
 if [ "$HAS_DONE_SIGNAL" = false ] && [ -f "$TRANSCRIPT" ]; then
-  TAIL_400=$(tail -400 "$TRANSCRIPT" 2>/dev/null || true)
-  if echo "$TAIL_400" | grep -Fq "$DONE_SIGNAL" 2>/dev/null; then
+  if transcript_has_done_signal "$TRANSCRIPT" "$DONE_SIGNAL"; then
     HAS_DONE_SIGNAL=true
   fi
 fi
