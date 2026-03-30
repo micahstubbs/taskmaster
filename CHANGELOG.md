@@ -33,6 +33,14 @@ All notable changes to Taskmaster are documented here.
 - Plan: `docs/plans/2026-04-28-083546-t1-fork-pattern-adoption.md`
 - Source review: `docs/upstream-reviews/blader-taskmaster-forks.md`
 
+## [2.4.0] - 2026-03-30
+
+### Changed
+- Install script now also copies hook to `~/.claude/hooks/taskmaster-check-completion.sh`
+  (user-level hooks directory), consistent with standard Claude Code hook layout.
+- Settings.json registration now points to `~/.claude/hooks/` path by default.
+- Uninstall script updated to clean up from both locations.
+
 ## [2.3.0] - 2026-02-25
 
 ### Changed

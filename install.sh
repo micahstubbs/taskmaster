@@ -125,6 +125,25 @@ if not isinstance(stop_hooks, list):
     stop_hooks = []
     container["Stop"] = stop_hooks
 
+# Migrate stale entries pointing at the old in-skill hook path
+# (~/.claude/skills/taskmaster/hooks/check-completion.sh) to the
+# user-level $HOME/.claude/hooks/ path. Idempotent.
+migrated = 0
+stale_marker = "skills/taskmaster/hooks/check-completion.sh"
+for entry in stop_hooks:
+    if not isinstance(entry, dict):
+        continue
+    hooks = entry.get("hooks")
+    if not isinstance(hooks, list):
+        continue
+    for hook in hooks:
+        if not isinstance(hook, dict):
+            continue
+        cmd = hook.get("command")
+        if hook.get("type") == "command" and isinstance(cmd, str) and stale_marker in cmd:
+            hook["command"] = hook_command
+            migrated += 1
+
 exists = False
 for entry in stop_hooks:
     if not isinstance(entry, dict):
@@ -159,8 +178,12 @@ with open(settings_path, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
 
+if migrated:
+    print(f"  Claude: migrated {migrated} stale Stop hook entr{'y' if migrated == 1 else 'ies'} to {hook_command}")
+
 if exists:
-    print("  Claude: Stop hook already configured")
+    if not migrated:
+        print("  Claude: Stop hook already configured")
 else:
     print("  Claude: added Stop hook to settings")
 PY
