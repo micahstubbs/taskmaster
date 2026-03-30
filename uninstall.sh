@@ -7,6 +7,7 @@
 set -euo pipefail
 
 SKILL_DIR="$HOME/.claude/skills/taskmaster"
+HOOKS_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 
 echo "Uninstalling Taskmaster..."
@@ -19,7 +20,15 @@ else
   echo "  Skill directory not found (already removed)"
 fi
 
-# 2. Remove hook from settings.json
+# 2. Remove hook from user-level hooks directory
+if [ -f "$HOOKS_DIR/taskmaster-check-completion.sh" ]; then
+  rm -f "$HOOKS_DIR/taskmaster-check-completion.sh"
+  echo "  Removed $HOOKS_DIR/taskmaster-check-completion.sh"
+else
+  echo "  User-level hook not found (already removed)"
+fi
+
+# 3. Remove hook from settings.json
 if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
   TMP=$(mktemp)
   jq '

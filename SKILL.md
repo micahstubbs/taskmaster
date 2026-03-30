@@ -6,7 +6,7 @@ description: |
   parseable done signal in its final response. Provides deterministic machine
   detection for true completion.
 author: blader
-version: 2.3.0
+version: 2.4.0
 ---
 
 # Taskmaster

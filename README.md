@@ -22,7 +22,7 @@ bash install.sh
 
 This will:
 - Copy skill files to `~/.claude/skills/taskmaster/`
-- Install the hook script at `~/.claude/skills/taskmaster/hooks/check-completion.sh`
+- Install the hook to `~/.claude/hooks/taskmaster-check-completion.sh`
 - Register the stop hook in `~/.claude/settings.json`
 
 Restart your coding agent after installing.
@@ -30,8 +30,8 @@ Restart your coding agent after installing.
 ## Manual Install
 
 1. Copy `SKILL.md` to `~/.claude/skills/taskmaster/SKILL.md`
-2. Copy `check-completion.sh` to `~/.claude/skills/taskmaster/hooks/check-completion.sh`
-3. Make it executable: `chmod +x ~/.claude/skills/taskmaster/hooks/check-completion.sh`
+2. Copy `check-completion.sh` to `~/.claude/hooks/taskmaster-check-completion.sh`
+3. Make it executable: `chmod +x ~/.claude/hooks/taskmaster-check-completion.sh`
 4. Add this hook entry to `~/.claude/settings.json`:
 
 ```json
@@ -42,7 +42,7 @@ Restart your coding agent after installing.
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/skills/taskmaster/hooks/check-completion.sh",
+            "command": "$HOME/.claude/hooks/taskmaster-check-completion.sh",
             "timeout": 10
           }
         ]
