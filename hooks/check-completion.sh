@@ -13,6 +13,8 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../taskmaster-compliance-prompt.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../taskmaster-verify-command.sh"
 
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
@@ -82,6 +84,21 @@ if [ "$HAS_DONE_SIGNAL" = false ] && [ -f "$TRANSCRIPT" ]; then
 fi
 
 if [ "$HAS_DONE_SIGNAL" = true ]; then
+  if [ -n "${TASKMASTER_VERIFY_COMMAND:-}" ]; then
+    if taskmaster_run_verify_command; then
+      rm -f "$COUNTER_FILE"
+      exit 0
+    else
+      VERIFY_REASON="TASKMASTER: verifier failed (exit=${TASKMASTER_VERIFY_EXIT_CODE}). Command: ${TASKMASTER_VERIFY_COMMAND}
+
+Output (last ${TASKMASTER_VERIFY_MAX_OUTPUT:-4000} bytes):
+${TASKMASTER_VERIFY_OUTPUT_TAIL}
+
+Token alone is insufficient when a verifier is configured. Fix the failures and try again."
+      jq -n --arg reason "$VERIFY_REASON" '{ decision: "block", reason: $reason }'
+      exit 0
+    fi
+  fi
   rm -f "$COUNTER_FILE"
   exit 0
 fi

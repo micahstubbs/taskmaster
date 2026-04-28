@@ -98,6 +98,24 @@ Fixed:
 - Codex transport: expect only
 - expect payload mode + submit timing
 
+### 5.1 Optional verifier command
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TASKMASTER_VERIFY_COMMAND` | unset | Shell command run when the done token is seen. Empty/unset = skip. |
+| `TASKMASTER_VERIFY_TIMEOUT` | `60` | Seconds before SIGTERM, +5s grace before SIGKILL. |
+| `TASKMASTER_VERIFY_MAX_OUTPUT` | `4000` | Bytes of combined stdout+stderr echoed back into the block reason. |
+| `TASKMASTER_VERIFY_CWD` | unset | If set, `cd` here before invoking. Else inherit hook's cwd. |
+
+When `TASKMASTER_VERIFY_COMMAND` is set, stop is allowed only when (a) the
+done token is present **and** (b) the command exits 0. A failing verifier
+overrides token-based completion and blocks with the command's exit code and
+truncated output.
+
+The verifier runs **only** when the done token is present, not on every stop
+attempt — this keeps slow verifiers (test suites, builds) from gating
+mid-work stop attempts.
+
 ## 6. Operational Notes
 
 - Enforcement is same-process for Codex and stop-hook based for Claude.
