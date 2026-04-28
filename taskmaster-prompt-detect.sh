@@ -11,6 +11,9 @@
 #      project and from mickn/taskmaster's fork.
 #
 
+# Idempotent re-source: avoid `readonly` re-declaration error under `set -e`.
+[[ -n "${TASKMASTER_PROMPT_DETECT_LOADED:-}" ]] && return 0
+readonly TASKMASTER_PROMPT_DETECT_LOADED=1
 readonly TASKMASTER_INJECTED_TAG_VERSION=1
 
 # Emit the canonical tag for a given kind. Caller prepends to their prompt.
