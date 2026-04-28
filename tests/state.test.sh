@@ -96,10 +96,13 @@ set -e
 POST_BYTES=$(wc -c < "$PATH5")
 [[ "$RC" != "0" ]] && ok "corrupted file: update returns non-zero" \
   || fail "corrupted file: update returns non-zero (got $RC)"
-[[ "$POST_BYTES" -gt 0 ]] && ok "corrupted file: not clobbered to empty" \
-  || fail "corrupted file: not clobbered to empty (size=$POST_BYTES)"
-[[ ! -f "${PATH5}.tmp"* ]] && ok "corrupted file: tmp file cleaned up" \
-  || fail "corrupted file: tmp file leaked"
+[[ "$POST_BYTES" == "$PRE_BYTES" ]] && ok "corrupted file: bytes preserved exactly" \
+  || fail "corrupted file: bytes changed (pre=$PRE_BYTES, post=$POST_BYTES)"
+if compgen -G "${PATH5}.tmp.*" >/dev/null; then
+  fail "corrupted file: tmp file leaked: $(echo "${PATH5}".tmp.*)"
+else
+  ok "corrupted file: tmp file cleaned up"
+fi
 
 # --- Critical #2 regression: migrate is additive (doesn't rewind a peer increment) ---
 LEGACY_DIR="${TMPDIR:-/tmp}/taskmaster"
