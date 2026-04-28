@@ -4,7 +4,7 @@ description: |
   Codex wrapper plus same-process expect PTY injector
   that keeps work moving until an explicit parseable done signal is emitted.
 author: blader
-version: 4.2.0
+version: 4.3.0
 ---
 
 # Taskmaster

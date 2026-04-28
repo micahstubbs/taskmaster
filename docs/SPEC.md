@@ -1,7 +1,7 @@
 # Taskmaster
 ## Product & Technical Specification
 
-**Version**: 4.2.0  
+**Version**: 4.3.0  
 **Scope**:
 - `taskmaster/check-completion.sh`
 - `taskmaster/taskmaster-compliance-prompt.sh`

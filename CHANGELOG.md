@@ -2,6 +2,37 @@
 
 All notable changes to Taskmaster are documented here.
 
+## v4.3.0 — 2026-04-28
+
+### Added
+- `TASKMASTER_VERIFY_COMMAND` env var: opt-in shell verifier that gates
+  stop after the done token is seen. Pairs with test suites, type-checkers,
+  or any repo-local check. Companion knobs: `TASKMASTER_VERIFY_TIMEOUT`
+  (default 60s), `TASKMASTER_VERIFY_MAX_OUTPUT` (default 4000 bytes),
+  `TASKMASTER_VERIFY_CWD`. (T1.1)
+- Tagged hook-injected prompts: every prompt the hook injects starts
+  with `[taskmaster:injected v=1 kind=<kind>]`. New
+  `taskmaster-prompt-detect.sh` lib lets downstream consumers
+  distinguish injected reprompts from real user goals. Legacy substring
+  detection preserved for back-compat. (T1.3)
+- JSON session state file at
+  `${TASKMASTER_STATE_DIR:-${TMPDIR}/taskmaster/state}/<session_id>.json`,
+  flock-protected, atomic writes. Schema v1 with `stop_count`,
+  `latest_user_prompt`, `last_verifier_run`, `metadata` fields ready for
+  T2/T3. (T1.2)
+
+### Changed
+- Stop-count tracking moved from the bare counter file at
+  `${TMPDIR}/taskmaster/<session_id>` to the new JSON state file.
+  Legacy counter files are absorbed on first read and deleted —
+  no user action required. The migration is flock-protected and
+  additive (a peer's increments are not rewound).
+
+### References
+- Design: `docs/designs/2026-04-28-072245-fork-pattern-adoption.md`
+- Plan: `docs/plans/2026-04-28-083546-t1-fork-pattern-adoption.md`
+- Source review: `docs/upstream-reviews/blader-taskmaster-forks.md`
+
 ## [2.3.0] - 2026-02-25
 
 ### Changed
