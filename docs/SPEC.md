@@ -88,6 +88,7 @@ Every prompt the hook injects starts with a single-line tag:
 ```
 
 `<kind>` ∈ `stop-block | followup | compliance | session-start | verifier-feedback`.
+The `compliance` and `session-start` kinds are reserved for future use (T2 native Codex hooks, T3 semantic verifier); only `stop-block`, `followup`, and `verifier-feedback` are emitted in v4.3.0.
 
 Downstream consumers (UserPromptSubmit hook, completion verifier, external
 tooling) detect injected prompts via `is_taskmaster_injected_prompt` from

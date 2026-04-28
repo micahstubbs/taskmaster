@@ -54,6 +54,7 @@ assert_detected "future schema v=99" "[taskmaster:injected v=99 kind=anything]"
 # --- Legacy substring matches (back-compat with mickn's prompts and our own) ---
 assert_detected "legacy: <hook_prompt" "<hook_prompt name=foo>...</hook_prompt>"
 assert_detected "legacy: Stop is blocked" "Stop is blocked until completion is explicitly confirmed."
+assert_detected "legacy: Completion check before stopping" "Completion check before stopping."
 assert_detected "legacy: TASKMASTER (N) label" "TASKMASTER (5/100): Stop is blocked..."
 assert_detected "legacy: TASKMASTER (N) label, no max" "TASKMASTER (5): Stop is blocked..."
 assert_detected "legacy: Goal not yet verified complete" "Goal not yet verified complete."
