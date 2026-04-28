@@ -50,20 +50,25 @@ taskmaster_state_init() {
   exec 9>"$lock"
   flock 9
   if [[ ! -f "$path" ]]; then
-    jq -n \
-      --arg sid "$sid" \
-      --arg now "$now" \
-      '{
-        schema_version: 1,
-        session_id: $sid,
-        created_at: $now,
-        updated_at: $now,
-        stop_count: 0,
-        latest_user_prompt: null,
-        last_verifier_run: null,
-        metadata: {}
-      }' >"$tmp"
-    mv "$tmp" "$path"
+    if jq -n \
+        --arg sid "$sid" \
+        --arg now "$now" \
+        '{
+          schema_version: 1,
+          session_id: $sid,
+          created_at: $now,
+          updated_at: $now,
+          stop_count: 0,
+          latest_user_prompt: null,
+          last_verifier_run: null,
+          metadata: {}
+        }' >"$tmp"; then
+      mv "$tmp" "$path"
+    else
+      rm -f "$tmp"
+      exec 9>&-
+      return 1
+    fi
   fi
   exec 9>&-
 }
@@ -89,8 +94,13 @@ taskmaster_state_update() {
 
   exec 9>"$lock"
   flock 9
-  jq --arg now "$now" "$expr | .updated_at = \$now" "$path" >"$tmp"
-  mv "$tmp" "$path"
+  if jq --arg now "$now" "$expr | .updated_at = \$now" "$path" >"$tmp"; then
+    mv "$tmp" "$path"
+  else
+    rm -f "$tmp"
+    exec 9>&-
+    return 1
+  fi
   exec 9>&-
 }
 
@@ -111,19 +121,28 @@ taskmaster_state_capture_prompt() {
 
   exec 9>"$lock"
   flock 9
-  jq \
-    --arg now "$now" \
-    --arg turn "$turn_id" \
-    --arg prompt "$prompt" \
-    '.latest_user_prompt = {captured_at: $now, turn_id: $turn, prompt: $prompt}
-     | .updated_at = $now' \
-    "$path" >"$tmp"
-  mv "$tmp" "$path"
+  if jq \
+      --arg now "$now" \
+      --arg turn "$turn_id" \
+      --arg prompt "$prompt" \
+      '.latest_user_prompt = {captured_at: $now, turn_id: $turn, prompt: $prompt}
+       | .updated_at = $now' \
+      "$path" >"$tmp"; then
+    mv "$tmp" "$path"
+  else
+    rm -f "$tmp"
+    exec 9>&-
+    return 1
+  fi
   exec 9>&-
 }
 
 taskmaster_state_record_verifier_run() {
   local sid="$1" input_hash="$2" complete="$3" reason="$4" next_action="$5"
+  case "$complete" in
+    true|false) ;;
+    *) return 64 ;;
+  esac
   local path tmp lock now
   path="$(taskmaster_state_path "$sid")"
   taskmaster_state_init "$sid"
@@ -134,21 +153,26 @@ taskmaster_state_record_verifier_run() {
 
   exec 9>"$lock"
   flock 9
-  jq \
-    --arg now "$now" \
-    --arg hash "$input_hash" \
-    --argjson complete "$complete" \
-    --arg reason "$reason" \
-    --arg next "$next_action" \
-    '.last_verifier_run = {
-        ran_at: $now,
-        input_hash: $hash,
-        complete: $complete,
-        reason: $reason,
-        next_action: $next
-     } | .updated_at = $now' \
-    "$path" >"$tmp"
-  mv "$tmp" "$path"
+  if jq \
+      --arg now "$now" \
+      --arg hash "$input_hash" \
+      --argjson complete "$complete" \
+      --arg reason "$reason" \
+      --arg next "$next_action" \
+      '.last_verifier_run = {
+          ran_at: $now,
+          input_hash: $hash,
+          complete: $complete,
+          reason: $reason,
+          next_action: $next
+       } | .updated_at = $now' \
+      "$path" >"$tmp"; then
+    mv "$tmp" "$path"
+  else
+    rm -f "$tmp"
+    exec 9>&-
+    return 1
+  fi
   exec 9>&-
 }
 
@@ -163,8 +187,31 @@ taskmaster_state_migrate_legacy_counter() {
   local count
   count="$(cat "$legacy" 2>/dev/null || echo 0)"
   [[ "$count" =~ ^[0-9]+$ ]] || count=0
+  # Cap length to prevent int overflow on downstream NEXT=$((COUNT + 1)).
+  [[ ${#count} -le 12 ]] || count=0
 
   taskmaster_state_init "$sid"
-  taskmaster_state_update "$sid" ".stop_count = $count"
-  rm -f "$legacy"
+
+  local path tmp lock now
+  path="$(taskmaster_state_path "$sid")"
+  lock="${path}.lock"
+  tmp="${path}.tmp.$$"
+  now="$(taskmaster_state_now)"
+
+  exec 9>"$lock"
+  flock 9
+  # Re-check legacy file under lock — if a peer migrated already, no-op.
+  if [[ -f "$legacy" ]]; then
+    if jq --arg now "$now" --argjson n "$count" \
+        '.stop_count = (.stop_count + $n) | .updated_at = $now' \
+        "$path" >"$tmp"; then
+      mv "$tmp" "$path"
+      rm -f "$legacy"
+    else
+      rm -f "$tmp"
+      exec 9>&-
+      return 1
+    fi
+  fi
+  exec 9>&-
 }
