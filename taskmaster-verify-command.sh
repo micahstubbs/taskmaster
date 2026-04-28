@@ -35,6 +35,7 @@ taskmaster_run_verify_command() {
   set +e
 
   out_file="$(mktemp "${TMPDIR:-/tmp}/taskmaster-verify.XXXXXX")"
+  trap 'rm -f "$out_file"' RETURN
 
   if [[ -n "$cwd" ]]; then
     ( cd "$cwd" && timeout --kill-after=5 "$timeout_sec" bash -c "$cmd" ) \
