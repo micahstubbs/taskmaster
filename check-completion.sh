@@ -8,7 +8,11 @@
 # Optional env vars:
 #   TASKMASTER_MAX          Max number of blocks before allowing stop (default: 100)
 #
-set -euo pipefail
+# errexit (-e) deliberately omitted — matches hooks/check-completion.sh.
+# Hook MUST emit a decision JSON; a non-zero from a helper lib (e.g.
+# taskmaster_state_update on a corrupt state file) shouldn't abort before
+# the final jq -n write. Per-call error handling lives at the call sites.
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
