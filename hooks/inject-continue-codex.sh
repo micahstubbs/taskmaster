@@ -15,6 +15,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../taskmaster-compliance-prompt.sh"
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/../taskmaster-prompt-detect.sh"
 
 usage() {
   cat <<'USAGE'
@@ -173,7 +175,10 @@ build_reprompt() {
 
   shared_prompt="$(build_taskmaster_compliance_prompt "$token")"
 
+  local injected_tag
+  injected_tag="$(generate_taskmaster_injected_tag followup)"
   cat <<RE-PROMPT
+${injected_tag}
 TASKMASTER: Stop is blocked until completion is explicitly confirmed.
 
 ${shared_prompt}

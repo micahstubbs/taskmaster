@@ -78,6 +78,22 @@ TASKMASTER_DONE::<session_id>
 - Injects payload into the same Codex PTY via bracketed paste.
 - Submits prompt with Enter after fixed short delay.
 
+### 3.5 Hook-injected prompt tag
+
+Every prompt the hook injects starts with a single-line tag:
+
+```
+[taskmaster:injected v=1 kind=<kind>]
+<actual content...>
+```
+
+`<kind>` ∈ `stop-block | followup | compliance | session-start | verifier-feedback`.
+
+Downstream consumers (UserPromptSubmit hook, completion verifier, external
+tooling) detect injected prompts via `is_taskmaster_injected_prompt` from
+`taskmaster-prompt-detect.sh`. Legacy substring detection is preserved for
+prompts emitted before this version.
+
 ## 4. Installation Behavior
 
 `install.sh` auto-detects Codex and/or Claude and installs matching targets.

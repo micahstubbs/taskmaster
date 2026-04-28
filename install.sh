@@ -53,6 +53,7 @@ copy_skill_files() {
   safe_copy "$SCRIPT_DIR/uninstall.sh" "$skill_dir/uninstall.sh"
   safe_copy "$SCRIPT_DIR/taskmaster-compliance-prompt.sh" "$skill_dir/taskmaster-compliance-prompt.sh"
   safe_copy "$SCRIPT_DIR/taskmaster-verify-command.sh" "$skill_dir/taskmaster-verify-command.sh"
+  safe_copy "$SCRIPT_DIR/taskmaster-prompt-detect.sh" "$skill_dir/taskmaster-prompt-detect.sh"
 
   safe_copy "$SCRIPT_DIR/run-taskmaster-codex.sh" "$skill_dir/run-taskmaster-codex.sh"
   safe_copy "$SCRIPT_DIR/check-completion.sh" "$skill_dir/check-completion.sh"
@@ -64,6 +65,7 @@ copy_skill_files() {
   chmod +x "$skill_dir/uninstall.sh"
   chmod +x "$skill_dir/taskmaster-compliance-prompt.sh"
   chmod +x "$skill_dir/taskmaster-verify-command.sh"
+  chmod +x "$skill_dir/taskmaster-prompt-detect.sh"
   chmod +x "$skill_dir/run-taskmaster-codex.sh"
   chmod +x "$skill_dir/check-completion.sh"
   chmod +x "$skill_dir/hooks/check-completion.sh"
@@ -233,6 +235,7 @@ install_claude() {
   ln -sf "$CLAUDE_SKILL_DIR/check-completion.sh" "$CLAUDE_HOOK_LINK"
   ln -sf "$CLAUDE_SKILL_DIR/taskmaster-compliance-prompt.sh" "$CLAUDE_HOOKS_DIR/taskmaster-compliance-prompt.sh"
   ln -sf "$CLAUDE_SKILL_DIR/taskmaster-verify-command.sh" "$CLAUDE_HOOKS_DIR/taskmaster-verify-command.sh"
+  ln -sf "$CLAUDE_SKILL_DIR/taskmaster-prompt-detect.sh" "$CLAUDE_HOOKS_DIR/taskmaster-prompt-detect.sh"
   chmod +x "$CLAUDE_HOOK_LINK"
 
   echo "  Claude: installed skill files to $CLAUDE_SKILL_DIR"

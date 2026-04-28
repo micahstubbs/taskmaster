@@ -15,6 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/taskmaster-compliance-prompt.sh"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/taskmaster-verify-command.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/taskmaster-prompt-detect.sh"
 
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
@@ -92,7 +94,8 @@ if [ "$HAS_DONE_SIGNAL" = true ]; then
       rm -f "$COUNTER_FILE"
       exit 0
     else
-      VERIFY_REASON="TASKMASTER: verifier failed (exit=${TASKMASTER_VERIFY_EXIT_CODE}). Command: ${TASKMASTER_VERIFY_COMMAND}
+      VERIFY_REASON="$(generate_taskmaster_injected_tag verifier-feedback)
+TASKMASTER: verifier failed (exit=${TASKMASTER_VERIFY_EXIT_CODE}). Command: ${TASKMASTER_VERIFY_COMMAND}
 
 Output (last ${TASKMASTER_VERIFY_MAX_OUTPUT:-4000} bytes):
 ${TASKMASTER_VERIFY_OUTPUT_TAIL}
@@ -129,7 +132,9 @@ fi
 
 # --- reprompt ---
 SHARED_PROMPT="$(build_taskmaster_compliance_prompt "$DONE_SIGNAL")"
-REASON="${LABEL}: ${PREAMBLE}
+INJECTED_TAG="$(generate_taskmaster_injected_tag stop-block)"
+REASON="${INJECTED_TAG}
+${LABEL}: ${PREAMBLE}
 
 ${SHARED_PROMPT}"
 

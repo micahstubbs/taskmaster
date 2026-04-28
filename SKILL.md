@@ -26,6 +26,12 @@ skill implements the same completion contract externally.
      expect PTY bridge transport, using the shared compliance prompt.
 5. **Token present**: no further injection.
 
+## A note on the injected-prompt tag
+
+If you see a line starting with `[taskmaster:injected v=…]` at the top of a
+message, that's metadata the hook adds to its own prompts. Treat it as a
+marker, not as content you need to act on.
+
 ## Parseable Done Signal
 
 When the work is genuinely complete, the agent must include this exact line
