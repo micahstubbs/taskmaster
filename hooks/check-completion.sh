@@ -17,6 +17,8 @@ source "$SCRIPT_DIR/../taskmaster-compliance-prompt.sh"
 source "$SCRIPT_DIR/../taskmaster-verify-command.sh"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../taskmaster-prompt-detect.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../taskmaster-state.sh"
 
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
@@ -34,16 +36,13 @@ if [ -f "$TRANSCRIPT" ]; then
   fi
 fi
 
-# --- counter ---
-COUNTER_DIR="${TMPDIR:-/tmp}/taskmaster"
-mkdir -p "$COUNTER_DIR"
-COUNTER_FILE="${COUNTER_DIR}/${SESSION_ID}"
-MAX=${TASKMASTER_MAX:-0}
+# --- counter (state-file backed) ---
+taskmaster_state_migrate_legacy_counter "$SESSION_ID"
+taskmaster_state_init "$SESSION_ID"
 
-COUNT=0
-if [ -f "$COUNTER_FILE" ]; then
-  COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo "0")
-fi
+MAX=${TASKMASTER_MAX:-0}
+COUNT="$(taskmaster_state_jq "$SESSION_ID" '.stop_count')"
+[[ "$COUNT" =~ ^[0-9]+$ ]] || COUNT=0
 
 transcript_has_done_signal() {
   local transcript_path="$1"
@@ -88,7 +87,7 @@ fi
 if [ "$HAS_DONE_SIGNAL" = true ]; then
   if [ -n "${TASKMASTER_VERIFY_COMMAND:-}" ]; then
     if taskmaster_run_verify_command; then
-      rm -f "$COUNTER_FILE"
+      taskmaster_state_update "$SESSION_ID" '.stop_count = 0'
       exit 0
     else
       VERIFY_REASON="$(generate_taskmaster_injected_tag verifier-feedback)
@@ -102,16 +101,16 @@ Token alone is insufficient when a verifier is configured. Fix the failures and 
       exit 0
     fi
   fi
-  rm -f "$COUNTER_FILE"
+  taskmaster_state_update "$SESSION_ID" '.stop_count = 0'
   exit 0
 fi
 
+taskmaster_state_increment_stop_count "$SESSION_ID"
 NEXT=$((COUNT + 1))
-echo "$NEXT" > "$COUNTER_FILE"
 
 # Optional escape hatch. Default is infinite (0) so hook keeps firing.
 if [ "$MAX" -gt 0 ] && [ "$NEXT" -ge "$MAX" ]; then
-  rm -f "$COUNTER_FILE"
+  taskmaster_state_update "$SESSION_ID" '.stop_count = 0'
   exit 0
 fi
 

@@ -204,6 +204,7 @@ uninstall_claude() {
   rm -f "$CLAUDE_ROOT/hooks/taskmaster-compliance-prompt.sh"
   rm -f "$CLAUDE_ROOT/hooks/taskmaster-verify-command.sh"
   rm -f "$CLAUDE_ROOT/hooks/taskmaster-prompt-detect.sh"
+  rm -f "$CLAUDE_ROOT/hooks/taskmaster-state.sh"
   remove_dir_if_exists "$CLAUDE_SKILL_DIR"
 }
 

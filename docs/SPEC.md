@@ -95,6 +95,31 @@ tooling) detect injected prompts via `is_taskmaster_injected_prompt` from
 `taskmaster-prompt-detect.sh`. Legacy substring detection is preserved for
 prompts emitted before this version.
 
+### 3.6 Session state file
+
+Path: `${TASKMASTER_STATE_DIR:-${TMPDIR:-/tmp}/taskmaster/state}/<session_id>.json`
+
+Schema (v1):
+
+```json
+{
+  "schema_version": 1,
+  "session_id": "<sid>",
+  "created_at": "<iso8601>",
+  "updated_at": "<iso8601>",
+  "stop_count": 0,
+  "latest_user_prompt": null,
+  "last_verifier_run": null,
+  "metadata": {}
+}
+```
+
+All writes go through `flock` on `<path>.lock` and atomic tmp+mv.
+
+**Legacy migration:** on first read per session, the hook absorbs any
+existing counter file at `${TMPDIR}/taskmaster/<session_id>` into
+`stop_count` and deletes the legacy file. Idempotent.
+
 ## 4. Installation Behavior
 
 `install.sh` auto-detects Codex and/or Claude and installs matching targets.
